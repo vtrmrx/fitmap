@@ -1,0 +1,7 @@
+{
+  "name": "Fitmap",
+  "id": "821231467410247264",
+  "api": "1.0.0",
+  "main": "dist/code.js",
+  "ui": "dist/ui.html"
+}

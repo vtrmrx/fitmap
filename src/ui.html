@@ -1,0 +1,142 @@
+<h1>Fitmap</h1>
+<canvas id="canvas" width="300" height="300" style="display: none"></canvas>
+<button type="button" name="button" onclick="rasterizeSelection()">Rasterize</button>
+<button type="button" name="button"onclick="closePlugin()">Cancel</button>
+<script>
+
+  function closePlugin() {
+    window.parent.postMessage({pluginMessage: 'close'}, '*')
+  }
+
+  function rasterizeSelection() {
+    console.log('send rasterize command')
+    window.parent.postMessage({pluginMessage: 'rasterize'}, '*')
+  }
+
+  window.onmessage = async (event) => {
+
+    if (event.data.pluginMessage == "initialize") {
+      console.log("initialize!")
+    } else {
+      let pathData = event.data.pluginMessage
+
+      const canvas = document.getElementById('canvas')
+      const context = canvas.getContext('2d')
+
+      const pathValues = Object.values(pathData.paths)
+
+      canvas.width = pathData.width
+      canvas.height = pathData.height
+
+      let pathRGB
+      let pathHex
+      if (pathData.fill.length > 0) {
+        pathRGB = pathData.fill[0].color
+        for (var component in pathRGB) {
+          if (pathRGB.hasOwnProperty(component)) {
+            pathRGB[component] *= 255;
+          }
+        }
+        pathHex = rgbToHex(Math.round(pathRGB.r), Math.round(pathRGB.g), Math.round(pathRGB.b))
+      }
+
+      let strokeRGB
+      let strokeHex
+      if (pathData.strokes.length > 0) {
+        strokeRGB = pathData.strokes[0].color
+        for (var component in strokeRGB) {
+          if (strokeRGB.hasOwnProperty(component)) {
+            strokeRGB[component] *= 255;
+          }
+        }
+        strokeHex = rgbToHex(Math.round(strokeRGB.r), Math.round(strokeRGB.g), Math.round(strokeRGB.b))
+      }
+
+      let strokeColor, strokewidth
+      if (pathData.strokes.length > 0) {
+        strokeColor = strokeHex
+        strokewidth = pathData.strokeWeight
+      } else {
+        strokeColor = '#000'
+        strokewidth = 0
+      }
+
+      if (pathData.strokes.length > 0 && pathData.strokeWeight > 0) {
+        context.translate(pathData.strokeWeight/2, pathData.strokeWeight/2);
+      }
+
+      for (const value of pathValues) {
+        let currentPath = new Path2D(value.data)
+        if (pathData.strokes.length > 0 && pathData.strokeWeight > 0) {
+          context.strokeStyle = strokeColor
+          context.lineWidth = strokewidth
+          context.stroke(currentPath)
+        }
+        if (pathData.fill.length > 0) {
+          console.log(value.windingRule)
+          context.fillStyle = pathHex
+          context.fill(currentPath, value.windingRule.toLowerCase())
+        }
+      }
+
+      const pathBitmap = context.getImageData(0, 0, pathData.width, pathData.height)
+
+      let pixels = pathBitmap.data
+
+      let darkest = 0;
+
+      if (pathData.strokes.length > 0) {
+        for (let i = 0; i < pixels.length; i += 4) {
+          pixels[i + 0] = Math.round(strokeRGB.r)
+          pixels[i + 1] = Math.round(strokeRGB.g)
+          pixels[i + 2] = Math.round(strokeRGB.b)
+          if (pixels[i + 3] > 127) {
+            pixels[i + 3] = 255
+          } else {
+            pixels[i + 3] = 0
+          }
+        }
+      } else {
+        for (let i = 0; i < pixels.length; i += 4) {
+          pixels[i + 0] = Math.round(pathRGB.r)
+          pixels[i + 1] = Math.round(pathRGB.g)
+          pixels[i + 2] = Math.round(pathRGB.b)
+          if (pixels[i + 3] > 127) {
+            pixels[i + 3] = 255
+          } else {
+            pixels[i + 3] = 0
+          }
+        }
+      }
+
+      const newBytes = await encode(canvas, context, pathBitmap)
+
+      console.log(newBytes)
+
+      window.parent.postMessage({pluginMessage: newBytes}, '*')
+    }
+  }
+
+  function componentToHex(c) {
+    let hex = c.toString(16);
+    return hex.length == 1 ? "0" + hex : hex;
+  }
+
+  function rgbToHex(r, g, b) {
+    return "#" + componentToHex(r) + componentToHex(g) + componentToHex(b);
+  }
+
+  async function encode(canvas, ctx, imageData) {
+    ctx.putImageData(imageData, 0, 0)
+
+    return await new Promise((resolve, reject) => {
+      canvas.toBlob(blob => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(new Uint8Array(reader.result))
+        reader.onerror = () => reject(new Error('Could not read from blob'))
+        reader.readAsArrayBuffer(blob)
+      })
+    })
+  }
+
+</script>

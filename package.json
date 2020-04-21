@@ -1,0 +1,22 @@
+{
+  "name": "fitmap",
+  "version": "1.0.0",
+  "description": "A plugin for previewing and exporting frames as monochrome bitmap layouts",
+  "main": "code.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Vítor Marques",
+  "license": "ISC",
+  "devDependencies": {
+    "css-loader": "^3.5.2",
+    "html-webpack-inline-source-plugin": "0.0.10",
+    "html-webpack-plugin": "^3.2.0",
+    "style-loader": "^1.1.4",
+    "ts-loader": "^6.2.2",
+    "typescript": "^3.8.3",
+    "url-loader": "^3.0.0",
+    "webpack": "^4.42.1",
+    "webpack-cli": "^3.3.11"
+  }
+}
