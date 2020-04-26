@@ -1,157 +1,114 @@
-//Promise.all(figma.currentPage.selection.map(selected => rasterizeSelection(selected))).then(() => maybeClose())
+init(figma.currentPage.selection)
 
-init(figma.currentPage.selection, 0)
+async function init(selectionArray) {
 
-async function init(selectionArray, index) {
+  if (selectionArray.length == 1) {
 
-  let selection = filterSelection(selectionArray)
+    let fills = selectionArray[0].fills
+    let strokes = selectionArray[0].strokes
+    let upperFill = fills[fills.length - 1]
+    let upperStroke = strokes[strokes.length - 1]
+    let hasVisibleFill: boolean
+    let hasVisibleCenteredStroke: boolean
 
-  console.log(selection.length)
+    if (fills.length > 0) {
+      hasVisibleFill = (upperFill.type === 'SOLID' && upperFill.opacity == 1 && upperFill.visible == true) ? true : false
+    } else {
+      hasVisibleFill = false
+    }
 
-  if (selection.length > 0) {
+    if (strokes.length > 0) {
+      hasVisibleCenteredStroke = (selectionArray[0].strokeAlign !== 'OUTSIDE' && upperStroke.type === 'SOLID' && upperStroke.opacity == 1 && upperStroke.visible == true) ? true : false
+    } else {
+      hasVisibleCenteredStroke = false
+    }
 
-    figma.showUI(__html__, { visible: true })
-    figma.ui.postMessage('initialize')
+    if (hasVisibleFill == true|| hasVisibleCenteredStroke == true) {
+      figma.showUI(__html__, { visible: true })
+      figma.ui.postMessage('initialize')
 
-    const response = await new Promise(
-      function(resolve, reject) {
-        figma.ui.onmessage = function(value) {
-          resolve(handleMessage(selection, value))
-        }
-      }
-    )
-
-  } else {
-    alert('Please select at least one path')
-    figma.closePlugin()
-  }
-}
-
-function filterSelection(selection) {
-  let selectionObject = {}
-  let selectionIndex = 0
-  selection.forEach(function(item, index) {
-    let t = item.type
-    if (t == 'BOOLEAN_OPERATION' || t == 'VECTOR' || t == 'STAR' || t == 'LINE' || t == 'ELLIPSE' || t == 'POLYGON' || t == 'RECTANGLE' || t == 'TEXT' ) {
-      selectionObject[selectionIndex] = item
-      selectionIndex++
-      console.log("it's a lovely figure: " + t)
-    } else if (t == 'FRAME' || t == 'GROUP' || t == 'INSTANCE') {
-      if (item.children.length > 0) {
-        let weirdStuff = false
-        for (let i = 0; i < item.children.length; i++) {
-          let ct = item.children[i].type
-          if (
-            ct != 'BOOLEAN_OPERATION' &&
-            ct != 'VECTOR' &&
-            ct != 'STAR' &&
-            ct != 'LINE' &&
-            ct != 'ELLIPSE' &&
-            ct != 'POLYGON' &&
-            ct != 'RECTANGLE' &&
-            ct != 'TEXT'
-          ) {
-            weirdStuff = true
-            console.log("contains weird stuff")
-            break
+      await new Promise(
+        function(resolve, reject) {
+          figma.ui.onmessage = function(value) {
+            resolve(handleMessage(selectionArray, value)),
+            reject(console.log("Failed to rasterize selection"))
           }
         }
-        if(weirdStuff == false) {
-          selectionObject[selectionIndex] = item
-          selectionIndex++
-          console.log("contains only clean stuff")
-        }
-      }
-    } else if (t == 'COMPONENT') {
-      console.log("it's a component. Leave it alone.")
-    } else if (t == 'DOCUMENT' || t == 'PAGE' || t == 'SLICE') {
-      console.log("it's some ugly thing: " + t)
+      )
+
+    } else {
+      alert("Path's last stroke or fill must solid and visible")
+      figma.closePlugin()
     }
-  });
-  let filteredArray = Object.values(selectionObject)
-  return filteredArray
+
+  } else if (selectionArray.length == 0) {
+    alert('Please select at least one path')
+    figma.closePlugin()
+  } else {
+    alert('Please select a single path only')
+    figma.closePlugin()
+  }
 }
 
 async function handleMessage(originalPath, message) {
 
   let workPath = originalPath;
 
-  if (message == 'close') {
+  if (message.type === 'CLOSE') {
 
     figma.closePlugin()
 
-  } else if (message == 'rasterize') {
+  } else if (message.type === 'RASTERIZE') {
 
-    workPath = figma.flatten(workPath)
-    workPath.resize(Math.round(workPath.width), Math.round(workPath.height))
-    //considering compound paths, create array with all paths
+    if( message.flatten == true ) {
+      workPath = figma.flatten(workPath)
+    } else {
+      workPath = workPath[0]
+    }
+
+    if( message.roundSize == true ) {
+      workPath.resize(Math.round(workPath.width), Math.round(workPath.height))
+    }
+
     let vectorPaths = {}
-    workPath.vectorPaths.forEach(function(item, index) {
+    workPath.vectorPaths.forEach(function(item: Object, index: number) {
       vectorPaths[index] = item
-    });
+    })
 
-    console.log(workPath)
-
-    //prepare selection data as message
     let data = {
       height: (workPath.strokes.length > 0) ? workPath.height + workPath.strokeWeight : workPath.height,
       width: (workPath.strokes.length > 0) ? workPath.width + workPath.strokeWeight : workPath.width,
-      x: Math.round(workPath.x),
-      y: Math.round(workPath.y),
+      x: (message.roundPosition == true) ? Math.round(workPath.x) : workPath.x,
+      y: (message.roundPosition == true) ? Math.round(workPath.y) : workPath.y,
       strokeWeight: workPath.strokeWeight,
+      strokeAlign: workPath.strokeAlign,
       strokes: workPath.strokes,
       paths: vectorPaths,
       fill: workPath.fills
     }
 
-    console.log(data)
-
     figma.ui.postMessage(data)
 
-    const pathBitmap = await new Promise(
-      function(resolve, reject) {
-        figma.ui.onmessage = function(value) {
-          resolve(replacePath(workPath, value))
-        }
-      }
-    )
+  } else if ((message.type === 'REPLACE')) {
+
+    console.log(message)
+
+    replacePath(workPath[0], message.bitmapData)
 
     figma.closePlugin()
 
   }
 
-}
-
-function clone(val) {
-  const type = typeof val
-  if (val === null) {
-    return null
-  } else if (type === 'undefined' || type === 'number' ||
-             type === 'string' || type === 'boolean') {
-    return val
-  } else if (type === 'object') {
-    if (val instanceof Array) {
-      return val.map(x => clone(x))
-    } else if (val instanceof Uint8Array) {
-      return new Uint8Array(val)
-    } else {
-      let o = {}
-      for (const key in val) {
-        o[key] = clone(val[key])
-      }
-      return o
-    }
-  }
-  throw 'unknown'
 }
 
 function replacePath(workPath, bitmapData) {
 
   console.log('replace path!')
 
-  let bitmapArray = Uint8Array.from(Object.values(bitmapData));
+  let bitmapArray = Uint8Array.from(Object.values(bitmapData))
   let figmaImage = figma.createImage(bitmapArray)
   let imageHash = figmaImage.hash
+
   let newPaint = {
     blendMode: "NORMAL",
     filters: {
@@ -170,12 +127,9 @@ function replacePath(workPath, bitmapData) {
     visible: true
   }
 
-  console.log(workPath)
-
-  let parent = workPath.parent
   let rect = figma.createRectangle()
 
-  let group = figma.group([workPath, rect], parent)
+  let group = figma.group([workPath, rect], workPath.parent)
   group.name = workPath.name
 
   workPath.x = Math.round(workPath.x)
@@ -203,66 +157,25 @@ function replacePath(workPath, bitmapData) {
   rect.fills = fills
 }
 
-function roundPaths(selection) {
-
-  //first, flatten selection(array of objects) to single path object
-  //let flatSelection = figma.flatten(Object.values(selection))
-
-  //get all flat selection vector paths structure
-  //let vectorPaths = flatSelection.vectorPaths
-
-  let vectorPaths = selection.vectorPaths
-
-  //clone vector paths structure
-  let vectorPathsClone = clone(vectorPaths)
-
-  vectorPaths.forEach(function(item, index) {
-    let roundRate = 0
-    let floorRate = 0
-    let ceilRate = 0
-
-    function roundNumber(match, offset, string) {
-      let roundedMatch = Math.round(parseFloat(match))
-      let singleAdjust = Math.abs(roundedMatch - parseFloat(match))
-      roundRate += singleAdjust
-      return roundedMatch
+function clone(val) {
+  const type = typeof val
+  if (val === null) {
+    return null
+  } else if (type === 'undefined' || type === 'number' ||
+             type === 'string' || type === 'boolean') {
+    return val
+  } else if (type === 'object') {
+    if (val instanceof Array) {
+      return val.map(x => clone(x))
+    } else if (val instanceof Uint8Array) {
+      return new Uint8Array(val)
+    } else {
+      let o = {}
+      for (const key in val) {
+        o[key] = clone(val[key])
+      }
+      return o
     }
-
-    function floorNumber(match, offset, string) {
-      let flooredMatch = Math.floor(parseFloat(match))
-      let singleAdjust = Math.abs(flooredMatch + parseFloat(match))
-      floorRate += singleAdjust
-      return flooredMatch
-    }
-
-    function ceilNumber(match, offset, string) {
-      let ceiledMatch = Math.ceil(parseFloat(match))
-      let singleAdjust = Math.abs(ceiledMatch + parseFloat(match))
-      ceilRate += singleAdjust
-      return ceiledMatch
-    }
-
-    let roundedData = vectorPathsClone[index].data.replace(/\d+\.\d+/g, roundNumber)
-    let flooredData = vectorPathsClone[index].data.replace(/\d+\.\d+/g, floorNumber)
-    let ceiledData = vectorPathsClone[index].data.replace(/\d+\.\d+/g, ceilNumber)
-
-    // console.log('rounding x flooring x ceiling:')
-    // console.log(roundRate)
-    // console.log(floorRate)
-    // console.log(ceilRate)
-
-    vectorPathsClone[index].data = roundedData
-
-    // if (floorRate < ceilRate) {
-    //   vectorPathsClone[index].data = flooredData
-    // } else {
-    //   vectorPathsClone[index].data = ceiledData
-    // }
-
-    // update flat selection vector paths to the rounded ones
-    selection.vectorPaths = vectorPathsClone
-
-  })
-  console.log(selection.vectorPaths)
-  return selection
+  }
+  throw 'unknown'
 }
