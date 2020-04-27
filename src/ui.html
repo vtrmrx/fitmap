@@ -52,11 +52,16 @@
           }
         }
         fillHex = rgbToHex(Math.round(fillRGB.r), Math.round(fillRGB.g), Math.round(fillRGB.b))
+      } else {
+
+        fillHex = '#000000'
+        fillRGB = hexToRgb(fillHex)
+
       }
 
-      let strokeRGB
-      let strokeHex
-      if (pathData.strokes.length > 0) {
+      let strokeRGB, strokeHex, strokeWidth
+      if (pathData.strokes.length > 0 && pathData.strokeWeight > 0) {
+
         strokeRGB = pathData.strokes[0].color
         for (var component in strokeRGB) {
           if (strokeRGB.hasOwnProperty(component)) {
@@ -64,21 +69,18 @@
           }
         }
         strokeHex = rgbToHex(Math.round(strokeRGB.r), Math.round(strokeRGB.g), Math.round(strokeRGB.b))
-      }
-
-      let strokeColor, strokewidth
-      if (pathData.strokes.length > 0) {
-        strokeColor = strokeHex
         strokewidth = (pathData.strokeAlign === 'CENTER') ? pathData.strokeWeight : pathData.strokeWeight * 2
-      } else {
-        strokeColor = '#000'
-        strokewidth = 0
-      }
 
-      if (pathData.strokes.length > 0 && pathData.strokeWeight > 0) {
         if (pathData.strokeAlign === 'CENTER' || pathData.strokeAlign === 'INSIDE' ) {
-          context.translate(pathData.strokeWeight/2, pathData.strokeWeight/2);
+          context.translate(pathData.strokeWeight/2, pathData.strokeWeight/2)
         }
+
+      } else {
+
+        strokeHex = '#000000'
+        strokeRGB = hexToRgb(strokeHex)
+        strokewidth = 0
+
       }
 
       let pathBitmap = context.getImageData(0, 0, pathData.width, pathData.height)
@@ -90,76 +92,93 @@
       let fillPixels = []
       let strokePixels = []
 
-      for (const value of pathValues) {
-        let currentPath = new Path2D(value.data)
-        if (pathData.strokeAlign === 'INSIDE' ) {
-          context.clip(currentPath)
-        }
+      if (pathData.fill.length > 0) {
 
-        if (pathData.fill.length > 0) {
-          context.clearRect(0, 0, pathData.width, pathData.height)
-          context.fillStyle = fillHex
+        context.clearRect(0, 0, pathData.width, pathData.height)
+        context.fillStyle = fillHex
+
+        for (const value of pathValues) {
+          let currentPath = new Path2D(value.data)
           context.fill(currentPath, value.windingRule.toLowerCase())
-
-          fillBitmap = context.getImageData(0, 0, pathData.width, pathData.height)
-
-          fillPixels = removeAlpha(fillBitmap.data)
-
-          fillBitmap = new ImageData(fillPixels, pathData.width, pathData.height)
-
         }
 
-        if (pathData.strokes.length > 0 && pathData.strokeWeight > 0) {
-          context.clearRect(0, 0, pathData.width, pathData.height);
-          context.strokeStyle = strokeColor
-          context.lineWidth = strokewidth
+        fillBitmap = context.getImageData(0, 0, pathData.width, pathData.height)
+
+        fillPixels = removeAlpha(fillBitmap.data)
+
+        fillBitmap = new ImageData(fillPixels, pathData.width, pathData.height)
+
+      } else {
+        fillBitmap = context.getImageData(0, 0, pathData.width, pathData.height)
+        fillPixels = fillBitmap.data
+        for (let i = 0; i < fillPixels.length; i += 4) {
+          fillPixels[i + 3] = 0
+        }
+        console.log(fillPixels)
+        fillBitmap = new ImageData(fillPixels, pathData.width, pathData.height)
+      }
+
+      if (pathData.strokes.length > 0 && pathData.strokeWeight > 0) {
+
+        context.clearRect(0, 0, pathData.width, pathData.height);
+        context.strokeStyle = strokeHex
+        context.lineWidth = strokewidth
+
+        for (const value of pathValues) {
+          let currentPath = new Path2D(value.data)
+          if (pathData.strokeAlign === 'INSIDE' ) {
+            context.clip(currentPath)
+          }
           context.stroke(currentPath)
-
-          strokeBitmap = context.getImageData(0, 0, pathData.width, pathData.height)
-
-          strokePixels = removeAlpha(strokeBitmap.data)
-
-          strokeBitmap = new ImageData(strokePixels, pathData.width, pathData.height)
-
         }
 
-        let pathPixels = pathBitmap.data
+        strokeBitmap = context.getImageData(0, 0, pathData.width, pathData.height)
+        strokePixels = removeAlpha(strokeBitmap.data)
+        strokeBitmap = new ImageData(strokePixels, pathData.width, pathData.height)
 
-        //let pathPixels = alphaComposite(pathBitmap.data, fillPixels, strokePixels, fillHex, strokeColor)
-
-        for (let i = 0; i < pathPixels.length; i += 4) {
-
-          let fillAlpha = fillPixels[i + 3] / 255
-          let fillRedAlpha = hexToRgb(fillHex).r * fillAlpha
-          let fillGreenAlpha = hexToRgb(fillHex).g * fillAlpha
-          let fillBlueAlpha = hexToRgb(fillHex).b * fillAlpha
-
-          let strokeAlpha = strokePixels[i + 3] / 255
-          let strokeRedAlpha = hexToRgb(strokeColor).r * strokeAlpha
-          let strokeGreenAlpha = hexToRgb(strokeColor).g * strokeAlpha
-          let strokeBlueAlpha = hexToRgb(strokeColor).b * strokeAlpha
-
-          let finalRed = strokeRedAlpha + fillRedAlpha * (1 - strokeAlpha)
-          let finalGreen = strokeGreenAlpha + fillGreenAlpha * (1 - strokeAlpha)
-          let finalBlue = strokeBlueAlpha + fillBlueAlpha * (1 - strokeAlpha)
-
-          let finalAlpha = (fillAlpha + strokeAlpha - fillAlpha * strokeAlpha) * 255
-
-          console.log('f: ' + finalRed + ' g: ' + finalGreen + ' b: ' + finalBlue + ' a: ' + finalAlpha)
-
-          pathPixels[i + 0] = finalRed
-          pathPixels[i + 1] = finalGreen
-          pathPixels[i + 2] = finalBlue
-          pathPixels[i + 3] = finalAlpha
-
+      } else {
+        strokeBitmap = context.getImageData(0, 0, pathData.width, pathData.height)
+        strokePixels = strokeBitmap.data
+        for (let i = 0; i < strokePixels.length; i += 4) {
+          strokePixels[i + 3] = 0
         }
+        strokeBitmap = new ImageData(strokePixels, pathData.width, pathData.height)
+      }
 
-        sumBitmap = new ImageData(pathPixels, pathData.width, pathData.height)
+      pathPixels = pathBitmap.data
 
-        pathBitmap = sumBitmap
+      //let pathPixels = alphaComposite(pathBitmap.data, fillPixels, strokePixels, fillHex, strokeHex)
 
+      for (let i = 0; i < pathPixels.length; i += 4) {
+
+        let fillAlpha = fillPixels[i + 3] / 255
+        let fillRedAlpha = hexToRgb(fillHex).r * fillAlpha
+        let fillGreenAlpha = hexToRgb(fillHex).g * fillAlpha
+        let fillBlueAlpha = hexToRgb(fillHex).b * fillAlpha
+
+        let strokeAlpha = strokePixels[i + 3] / 255
+        let strokeRedAlpha = hexToRgb(strokeHex).r * strokeAlpha
+        let strokeGreenAlpha = hexToRgb(strokeHex).g * strokeAlpha
+        let strokeBlueAlpha = hexToRgb(strokeHex.b) * strokeAlpha
+
+        let finalRed = strokeRedAlpha + fillRedAlpha * (1 - strokeAlpha)
+        let finalGreen = strokeGreenAlpha + fillGreenAlpha * (1 - strokeAlpha)
+        let finalBlue = strokeBlueAlpha + fillBlueAlpha * (1 - strokeAlpha)
+
+        let finalAlpha = (fillAlpha + strokeAlpha - fillAlpha * strokeAlpha) * 255
+
+        console.log('f: ' + finalRed + ' g: ' + finalGreen + ' b: ' + finalBlue + ' a: ' + finalAlpha)
+
+        pathPixels[i + 0] = finalRed
+        pathPixels[i + 1] = finalGreen
+        pathPixels[i + 2] = finalBlue
+        pathPixels[i + 3] = finalAlpha
 
       }
+
+      sumBitmap = new ImageData(pathPixels, pathData.width, pathData.height)
+
+      pathBitmap = sumBitmap
 
       const newBytes = await encode(canvas, context, pathBitmap)
 
@@ -196,7 +215,7 @@
       pixels[i + 0] = bitmapData[i + 0]
       pixels[i + 1] = bitmapData[i + 1]
       pixels[i + 2] = bitmapData[i + 2]
-      if (bitmapData[i + 3] > 127) {
+      if (bitmapData[i + 3] >= 127) {
         pixels[i + 3] = 255
       } else {
         pixels[i + 3] = 0

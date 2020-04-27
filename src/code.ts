@@ -4,40 +4,51 @@ async function init(selectionArray) {
 
   if (selectionArray.length == 1) {
 
-    let fills = selectionArray[0].fills
-    let strokes = selectionArray[0].strokes
-    let upperFill = fills[fills.length - 1]
-    let upperStroke = strokes[strokes.length - 1]
-    let hasVisibleFill: boolean
-    let hasVisibleCenteredStroke: boolean
+    let selectionType = selectionArray[0].type
 
-    if (fills.length > 0) {
-      hasVisibleFill = (upperFill.type === 'SOLID' && upperFill.opacity == 1 && upperFill.visible == true) ? true : false
-    } else {
-      hasVisibleFill = false
-    }
+    //if(selectionType == 'RECTANGLE' || selectionType == 'LINE' || selectionType == 'ELLIPSE' || selectionType == 'POLYGON' || selectionType == 'STAR' || selectionType == 'VECTOR' || selectionType == 'TEXT' || selectionType == 'BOOLEAN_OPERATION' ) {}
 
-    if (strokes.length > 0) {
-      hasVisibleCenteredStroke = (selectionArray[0].strokeAlign !== 'OUTSIDE' && upperStroke.type === 'SOLID' && upperStroke.opacity == 1 && upperStroke.visible == true) ? true : false
-    } else {
-      hasVisibleCenteredStroke = false
-    }
+    if( selectionType == 'VECTOR' ) {
 
-    if (hasVisibleFill == true|| hasVisibleCenteredStroke == true) {
-      figma.showUI(__html__, { visible: true })
-      figma.ui.postMessage('initialize')
+      let fills = selectionArray[0].fills
+      let strokes = selectionArray[0].strokes
+      let upperFill = fills[fills.length - 1]
+      let upperStroke = strokes[strokes.length - 1]
+      let hasVisibleFill: boolean
+      let hasVisibleCenteredStroke: boolean
 
-      await new Promise(
-        function(resolve, reject) {
-          figma.ui.onmessage = function(value) {
-            resolve(handleMessage(selectionArray, value)),
-            reject(console.log("Failed to rasterize selection"))
+      if (fills.length > 0) {
+        hasVisibleFill = (upperFill.type === 'SOLID' && upperFill.opacity == 1 && upperFill.visible == true) ? true : false
+      } else {
+        hasVisibleFill = false
+      }
+
+      if (strokes.length > 0) {
+        hasVisibleCenteredStroke = (selectionArray[0].strokeAlign !== 'OUTSIDE' && upperStroke.type === 'SOLID' && upperStroke.opacity == 1 && upperStroke.visible == true) ? true : false
+      } else {
+        hasVisibleCenteredStroke = false
+      }
+
+      if (hasVisibleFill == true|| hasVisibleCenteredStroke == true) {
+        figma.showUI(__html__, { visible: true })
+        figma.ui.postMessage('initialize')
+
+        await new Promise(
+          function(resolve, reject) {
+            figma.ui.onmessage = function(value) {
+              resolve(handleMessage(selectionArray, value)),
+              reject(console.log("Failed to rasterize selection"))
+            }
           }
-        }
-      )
+        )
+
+      } else {
+        alert("Path's last stroke or fill must solid and visible")
+        figma.closePlugin()
+      }
 
     } else {
-      alert("Path's last stroke or fill must solid and visible")
+      alert('Selection must be a path')
       figma.closePlugin()
     }
 
