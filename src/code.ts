@@ -71,7 +71,7 @@ async function handleMessage(originalPath, message) {
 
   } else if (message.type === 'RASTERIZE') {
 
-    if( message.flatten == true ) {
+    if( message.flattenSelection == true ) {
       workPath = figma.flatten(workPath)
     } else {
       workPath = workPath[0]
