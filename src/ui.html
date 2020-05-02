@@ -17,16 +17,18 @@
       roundPosition: true,
       roundPaths: false
     }
-    console.log('send rasterize command')
+    console.log("send rasterize command")
     window.parent.postMessage({pluginMessage: data}, '*')
   }
 
   window.onmessage = async (event) => {
 
-    if (event.data.pluginMessage == "initialize") {
+    if (event.data.pluginMessage.type === 'INIT') {
       console.log("initialize!")
     } else {
       let pathData = event.data.pluginMessage
+
+      let workPath = pathData.workPath
 
       const canvas = document.getElementById('canvas')
       const context = canvas.getContext('2d')
@@ -35,7 +37,7 @@
       context.mozImageSmoothingEnabled = false
       context.imageSmoothingEnabled = false
 
-      const pathValues = Object.values(pathData.paths)
+      const pathValues = Object.values(pathData.vectorPaths)
 
       canvas.width = pathData.width
       canvas.height = pathData.height
@@ -97,7 +99,8 @@
 
         for (const value of pathValues) {
           let currentPath = new Path2D(value.data)
-          context.fill(currentPath, value.windingRule.toLowerCase())
+          let windingRule = (value.windingRule === 'NONE') ? 'nonzero' : value.windingRule
+          context.fill(currentPath, windingRule.toLowerCase())
         }
 
         fillBitmap = context.getImageData(0, 0, pathData.width, pathData.height)
@@ -112,7 +115,7 @@
         for (let i = 0; i < fillPixels.length; i += 4) {
           fillPixels[i + 3] = 0
         }
-        console.log(fillPixels)
+        //console.log(fillPixels)
         fillBitmap = new ImageData(fillPixels, pathData.width, pathData.height)
       }
 
@@ -165,7 +168,7 @@
 
         let finalAlpha = (fillAlpha + strokeAlpha - fillAlpha * strokeAlpha) * 255
 
-        console.log('f: ' + finalRed + ' g: ' + finalGreen + ' b: ' + finalBlue + ' a: ' + finalAlpha)
+        //console.log('f: ' + finalRed + ' g: ' + finalGreen + ' b: ' + finalBlue + ' a: ' + finalAlpha)
 
         pathPixels[i + 0] = finalRed
         pathPixels[i + 1] = finalGreen
@@ -182,6 +185,7 @@
 
       let data = {
         type: 'REPLACE',
+        workPath: workPath,
         bitmapData: newBytes
       }
 
@@ -191,11 +195,11 @@
 
   function componentToHex(c) {
     let hex = c.toString(16);
-    return hex.length == 1 ? "0" + hex : hex;
+    return hex.length == 1 ? '0' + hex : hex;
   }
 
   function rgbToHex(r, g, b) {
-    return "#" + componentToHex(r) + componentToHex(g) + componentToHex(b);
+    return '#' + componentToHex(r) + componentToHex(g) + componentToHex(b);
   }
 
   function hexToRgb(hex) {
@@ -229,7 +233,7 @@
       canvas.toBlob(blob => {
         const reader = new FileReader()
         reader.onload = () => resolve(new Uint8Array(reader.result))
-        reader.onerror = () => reject(new Error('Could not read from blob'))
+        reader.onerror = () => reject(new Error("Could not read from blob"))
         reader.readAsArrayBuffer(blob)
       })
     })

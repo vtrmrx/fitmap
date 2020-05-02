@@ -4,40 +4,34 @@ async function init(selectionArray) {
 
   if (selectionArray.length == 1) {
 
-    let selectionType = selectionArray[0].type
+    let selection = selectionArray[0],
+        fills = selection.fills,
+        strokes = selection.strokes,
+        upperFill = fills[fills.length - 1],
+        upperStroke = strokes[strokes.length - 1],
+        hasVisibleFill = false,
+        hasVisibleCenteredStroke = false
 
-    //if(selectionType == 'RECTANGLE' || selectionType == 'LINE' || selectionType == 'ELLIPSE' || selectionType == 'POLYGON' || selectionType == 'STAR' || selectionType == 'VECTOR' || selectionType == 'TEXT' || selectionType == 'BOOLEAN_OPERATION' ) {}
-
-    if( selectionType == 'VECTOR' ) {
-
-      let fills = selectionArray[0].fills
-      let strokes = selectionArray[0].strokes
-      let upperFill = fills[fills.length - 1]
-      let upperStroke = strokes[strokes.length - 1]
-      let hasVisibleFill: boolean
-      let hasVisibleCenteredStroke: boolean
+    if(selection.type == 'RECTANGLE' || selection.type == 'ELLIPSE' || selection.type == 'VECTOR' || selection.type == 'BOOLEAN_OPERATION' ) {
 
       if (fills.length > 0) {
         hasVisibleFill = (upperFill.type === 'SOLID' && upperFill.opacity == 1 && upperFill.visible == true) ? true : false
-      } else {
-        hasVisibleFill = false
       }
 
       if (strokes.length > 0) {
         hasVisibleCenteredStroke = (selectionArray[0].strokeAlign !== 'OUTSIDE' && upperStroke.type === 'SOLID' && upperStroke.opacity == 1 && upperStroke.visible == true) ? true : false
-      } else {
-        hasVisibleCenteredStroke = false
       }
 
-      if (hasVisibleFill == true|| hasVisibleCenteredStroke == true) {
+      if (hasVisibleFill == true || hasVisibleCenteredStroke == true) {
         figma.showUI(__html__, { visible: true })
-        figma.ui.postMessage('initialize')
+        figma.ui.postMessage({ type: 'INIT' })
+
+        let currentPath = selection
 
         await new Promise(
           function(resolve, reject) {
             figma.ui.onmessage = function(value) {
-              resolve(handleMessage(selectionArray, value)),
-              reject(console.log("Failed to rasterize selection"))
+              resolve(handleMessage(currentPath, value))
             }
           }
         )
@@ -48,36 +42,47 @@ async function init(selectionArray) {
       }
 
     } else {
-      alert('Selection must be a path')
+      alert("Selection must be a path")
       figma.closePlugin()
     }
 
   } else if (selectionArray.length == 0) {
-    alert('Please select at least one path')
+    alert("Please select at least one path")
     figma.closePlugin()
   } else {
-    alert('Please select a single path only')
+    alert("Please select a single path only")
     figma.closePlugin()
   }
 }
 
-async function handleMessage(originalPath, message) {
+async function handleMessage( path, message ) {
 
-  let workPath = originalPath;
+  let workPath = path
 
   if (message.type === 'CLOSE') {
-
     figma.closePlugin()
+  }
 
-  } else if (message.type === 'RASTERIZE') {
-
-    if( message.flattenSelection == true ) {
-      workPath = figma.flatten(workPath)
-    } else {
-      workPath = workPath[0]
+  if ((message.type === 'REPLACE')) {
+    workPath = figma.getNodeById(message.workPath.id)
+    replacePath(path, message.bitmapData)
+    if (path != workPath) {
+      console.log('remove duplicate:')
+      console.log(workPath)
+      workPath.remove()
     }
+    figma.closePlugin()
+  }
+
+  if (message.type === 'RASTERIZE') {
+
+    let flattenedPath = workPath.clone()
+    flattenedPath = figma.flatten([flattenedPath])
+
+    workPath = flattenedPath
 
     if( message.roundSize == true ) {
+      path.resize(Math.round(workPath.width), Math.round(workPath.height))
       workPath.resize(Math.round(workPath.width), Math.round(workPath.height))
     }
 
@@ -87,6 +92,7 @@ async function handleMessage(originalPath, message) {
     })
 
     let data = {
+      workPath: workPath,
       height: (workPath.strokes.length > 0) ? workPath.height + workPath.strokeWeight : workPath.height,
       width: (workPath.strokes.length > 0) ? workPath.width + workPath.strokeWeight : workPath.width,
       x: (message.roundPosition == true) ? Math.round(workPath.x) : workPath.x,
@@ -94,19 +100,11 @@ async function handleMessage(originalPath, message) {
       strokeWeight: workPath.strokeWeight,
       strokeAlign: workPath.strokeAlign,
       strokes: workPath.strokes,
-      paths: vectorPaths,
+      vectorPaths: vectorPaths,
       fill: workPath.fills
     }
 
     figma.ui.postMessage(data)
-
-  } else if ((message.type === 'REPLACE')) {
-
-    console.log(message)
-
-    replacePath(workPath[0], message.bitmapData)
-
-    figma.closePlugin()
 
   }
 
@@ -114,14 +112,12 @@ async function handleMessage(originalPath, message) {
 
 function replacePath(workPath, bitmapData) {
 
-  console.log('replace path!')
-
   let bitmapArray = Uint8Array.from(Object.values(bitmapData))
   let figmaImage = figma.createImage(bitmapArray)
   let imageHash = figmaImage.hash
 
   let newPaint = {
-    blendMode: "NORMAL",
+    blendMode: 'NORMAL',
     filters: {
       exposure: 0,
       contrast: 0,
@@ -132,9 +128,9 @@ function replacePath(workPath, bitmapData) {
     imageHash: imageHash,
     imageTransform: [[1, 0, 0],[0, 1, 0]],
     opacity: 1,
-    scaleMode: "CROP",
+    scaleMode: 'CROP',
     scalingFactor: 1,
-    type: "IMAGE",
+    type: 'IMAGE',
     visible: true
   }
 
