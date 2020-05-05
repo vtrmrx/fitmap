@@ -30,6 +30,7 @@ class App extends React.Component {
       roundPosition: this.state.roundPosition,
       roundPaths: false
     }
+    console.log("send rasterize command")
     parent.postMessage({pluginMessage: data}, '*')
   }
 

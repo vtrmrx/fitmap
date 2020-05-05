@@ -12,7 +12,7 @@ async function init(selectionArray) {
         hasVisibleFill = false,
         hasVisibleCenteredStroke = false
 
-    if(selection.type == 'RECTANGLE' || selection.type == 'ELLIPSE' || selection.type == 'VECTOR' || selection.type == 'BOOLEAN_OPERATION' ) {
+    if(selection.type == 'RECTANGLE' || selection.type == 'ELLIPSE' || selection.type == 'VECTOR' || selection.type == 'BOOLEAN_OPERATION'  || selection.type == 'POLYGON' || selection.type == 'STAR' || selection.type == 'LINE' || selection.type == 'TEXT') {
 
       if (fills.length > 0) {
         hasVisibleFill = (upperFill.type === 'SOLID' && upperFill.opacity == 1 && upperFill.visible == true) ? true : false
@@ -42,7 +42,7 @@ async function init(selectionArray) {
       }
 
     } else {
-      alert("Selection must be a path")
+      alert("Selection must be a simple path")
       figma.closePlugin()
     }
 
@@ -65,13 +65,10 @@ async function handleMessage( path, message ) {
 
   if ((message.type === 'REPLACE')) {
     workPath = figma.getNodeById(message.workPath.id)
-    replacePath(path, message.bitmapData)
-    if (path != workPath) {
-      console.log('remove duplicate:')
-      console.log(workPath)
-      workPath.remove()
-    }
-    figma.closePlugin()
+    workPath.name = 'workPath'
+    replacePath(path, workPath, message.bitmapData, message.roundPosition)
+    workPath.remove()
+    //figma.closePlugin()
   }
 
   if (message.type === 'RASTERIZE') {
@@ -82,23 +79,36 @@ async function handleMessage( path, message ) {
     workPath = flattenedPath
 
     if( message.roundSize == true ) {
-      path.resize(Math.round(workPath.width), Math.round(workPath.height))
+      console.log("round sizes")
+      path.resize(Math.round(path.width), Math.round(path.height))
       workPath.resize(Math.round(workPath.width), Math.round(workPath.height))
     }
+
+    if( message.roundPosition == true ) {
+      console.log("round positions")
+      path.x = Math.round(path.x)
+      path.y = Math.round(path.y)
+    }
+    workPath.resize(Math.round(workPath.width), Math.round(workPath.height))
+    workPath.x = Math.round(workPath.x)
+    workPath.y = Math.round(workPath.y)
 
     let vectorPaths = {}
     workPath.vectorPaths.forEach(function(item: Object, index: number) {
       vectorPaths[index] = item
     })
 
+    console.log(workPath.strokeCap)
+
     let data = {
       workPath: workPath,
-      height: (workPath.strokes.length > 0) ? workPath.height + workPath.strokeWeight : workPath.height,
-      width: (workPath.strokes.length > 0) ? workPath.width + workPath.strokeWeight : workPath.width,
+      height: (workPath.strokes.length > 0 && workPath.strokeAlign == 'CENTER') ? workPath.height + workPath.strokeWeight : workPath.height,
+      width: (workPath.strokes.length > 0 && workPath.strokeAlign == 'CENTER') ? workPath.width + workPath.strokeWeight : workPath.width,
       x: (message.roundPosition == true) ? Math.round(workPath.x) : workPath.x,
       y: (message.roundPosition == true) ? Math.round(workPath.y) : workPath.y,
       strokeWeight: workPath.strokeWeight,
-      strokeAlign: workPath.strokeAlign,
+      strokeAlign: (typeof path.cornerRadius == 'undefined') ? 'CENTER' : workPath.strokeAlign,
+      strokeCap: workPath.strokeCap,
       strokes: workPath.strokes,
       vectorPaths: vectorPaths,
       fill: workPath.fills
@@ -110,7 +120,7 @@ async function handleMessage( path, message ) {
 
 }
 
-function replacePath(workPath, bitmapData) {
+function replacePath(originalPath, workPath, bitmapData, roundPosition) {
 
   let bitmapArray = Uint8Array.from(Object.values(bitmapData))
   let figmaImage = figma.createImage(bitmapArray)
@@ -136,28 +146,30 @@ function replacePath(workPath, bitmapData) {
 
   let rect = figma.createRectangle()
 
-  let group = figma.group([workPath, rect], workPath.parent)
-  group.name = workPath.name
+  let group = figma.group([originalPath, rect], originalPath.parent)
+  group.name = originalPath.name
 
-  workPath.x = Math.round(workPath.x)
-  workPath.y = Math.round(workPath.y)
+  if (roundPosition == true) {
+    originalPath.x = Math.round(originalPath.x)
+    originalPath.y = Math.round(originalPath.y)
+  }
 
-  rect.x = (workPath.strokes.length > 0) ? workPath.x - workPath.strokeWeight / 2 : workPath.x
-  rect.y = (workPath.strokes.length > 0) ? workPath.y - workPath.strokeWeight / 2 : workPath.y
+  rect.x = (workPath.strokes.length > 0 && workPath.strokeAlign == 'CENTER') ? (workPath.x - workPath.strokeWeight / 2) : workPath.x
+  rect.y = (workPath.strokes.length > 0 && workPath.strokeAlign == 'CENTER') ? workPath.y - workPath.strokeWeight / 2 : workPath.y
   rect.name = 'Bitmap'
   rect.fills = workPath.fills
 
-  workPath.name = 'Vector'
-  workPath.locked = true
-  workPath.visible = false
+  originalPath.name = 'Vector'
+  originalPath.locked = true
+  originalPath.visible = false
 
   rect.resize(
-    (workPath.strokes.length > 0) ? workPath.width + workPath.strokeWeight : workPath.width,
-    (workPath.strokes.length > 0) ? workPath.height + workPath.strokeWeight : workPath.height
+    (workPath.strokes.length > 0 && workPath.strokeAlign == 'CENTER') ? workPath.width + workPath.strokeWeight : workPath.width,
+    (workPath.strokes.length > 0 && workPath.strokeAlign == 'CENTER') ? workPath.height + workPath.strokeWeight : workPath.height
   )
 
-  group.x = workPath.x
-  group.y = workPath.y
+  //group.x = originalPath.x
+  //group.y = originalPath.y
 
   const fills = clone(workPath.fills)
   fills[0] = newPaint

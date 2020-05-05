@@ -2,25 +2,6 @@
 <canvas id="canvas" width="300" height="100" style="display:none"></canvas>
 <script>
 
-  function closePlugin() {
-    let data = {
-      type: 'CLOSE'
-    }
-    window.parent.postMessage({pluginMessage: data}, '*')
-  }
-
-  function rasterizeSelection() {
-    let data = {
-      type: 'RASTERIZE',
-      flatten: false,
-      roundSize: false,
-      roundPosition: true,
-      roundPaths: false
-    }
-    console.log("send rasterize command")
-    window.parent.postMessage({pluginMessage: data}, '*')
-  }
-
   window.onmessage = async (event) => {
 
     if (event.data.pluginMessage.type === 'INIT') {
@@ -39,6 +20,7 @@
 
       const pathValues = Object.values(pathData.vectorPaths)
 
+      console.log(pathData.width + ";" + pathData.height)
       canvas.width = pathData.width
       canvas.height = pathData.height
 
@@ -59,7 +41,7 @@
 
       }
 
-      let strokeRGB, strokeHex, strokeWidth
+      let strokeRGB, strokeHex, strokeWidth, strokeCap
       if (pathData.strokes.length > 0 && pathData.strokeWeight > 0) {
 
         strokeRGB = pathData.strokes[0].color
@@ -70,8 +52,9 @@
         }
         strokeHex = rgbToHex(Math.round(strokeRGB.r), Math.round(strokeRGB.g), Math.round(strokeRGB.b))
         strokewidth = (pathData.strokeAlign === 'CENTER') ? pathData.strokeWeight : pathData.strokeWeight * 2
+        strokeCap = pathData.strokeCap
 
-        if (pathData.strokeAlign === 'CENTER' || pathData.strokeAlign === 'INSIDE' ) {
+        if (pathData.strokeAlign === 'CENTER' ) {
           context.translate(pathData.strokeWeight/2, pathData.strokeWeight/2)
         }
 
@@ -115,7 +98,6 @@
         for (let i = 0; i < fillPixels.length; i += 4) {
           fillPixels[i + 3] = 0
         }
-        //console.log(fillPixels)
         fillBitmap = new ImageData(fillPixels, pathData.width, pathData.height)
       }
 
@@ -124,6 +106,11 @@
         context.clearRect(0, 0, pathData.width, pathData.height);
         context.strokeStyle = strokeHex
         context.lineWidth = strokewidth
+        if (strokeCap == 'NONE' || strokeCap == 'ROUND') {
+          context.lineCap = strokeCap.toLowerCase()
+        }
+
+        console.log(strokeHex)
 
         for (const value of pathValues) {
           let currentPath = new Path2D(value.data)
@@ -136,6 +123,7 @@
         strokeBitmap = context.getImageData(0, 0, pathData.width, pathData.height)
         strokePixels = removeAlpha(strokeBitmap.data)
         strokeBitmap = new ImageData(strokePixels, pathData.width, pathData.height)
+        console.log(strokeBitmap.data)
 
       } else {
         strokeBitmap = context.getImageData(0, 0, pathData.width, pathData.height)
@@ -193,12 +181,11 @@
     }
   }
 
-  function componentToHex(c) {
-    let hex = c.toString(16);
-    return hex.length == 1 ? '0' + hex : hex;
-  }
-
   function rgbToHex(r, g, b) {
+    function componentToHex(c) {
+      let hex = c.toString(16);
+      return hex.length == 1 ? '0' + hex : hex;
+    }
     return '#' + componentToHex(r) + componentToHex(g) + componentToHex(b);
   }
 
@@ -228,7 +215,6 @@
 
   async function encode(canvas, ctx, imageData) {
     ctx.putImageData(imageData, 0, 0)
-
     return await new Promise((resolve, reject) => {
       canvas.toBlob(blob => {
         const reader = new FileReader()
